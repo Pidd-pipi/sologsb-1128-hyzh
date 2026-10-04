@@ -42,9 +42,10 @@ sologsb-1128/
 │   ├── nginx.conf              # try_files $uri $uri/ /index.html + gzip
 │   ├── public/favicon.svg
 │   └── src/
-│       ├── types/              # port.ts / vessel.ts / call.ts / berth.ts（4 个数据模型）
-│       ├── stores/             # portStore.ts / vesselStore.ts / uiStore.ts
-│       ├── db/                 # index.ts（Dexie v1→v3 迁移）/ berth.ts / seed.ts
+│       ├── types/              # port.ts / vessel.ts / call.ts / berth.ts / lease.ts（租约账本模型）
+│       ├── stores/             # portStore.ts（账本状态）/ vesselStore.ts / uiStore.ts
+│       ├── services/           # occupancy.ts（占用账本：抢占 / 排队 / 版本冲突 / 租约失效 / 补位）
+│       ├── db/                 # index.ts（Dexie v1→v4 迁移）/ berth.ts / seed.ts
 │       ├── components/common/  # PortCard / BerthGrid / VesselSpecTable / MapPanel / EmptyState
 │       ├── hooks/              # useAmapLoader / useBerthStatus / useLocalDraft
 │       ├── pages/              # PortList / PortDetail / VesselList / VesselDetail / CallBoard / MapView
@@ -61,7 +62,7 @@ sologsb-1128/
 | `/ports/:id` | 渔港详情：基本信息与补给能力、SVG 泊位网格（点击查看占用船舶）、在港船舶与近日流水 | 四个模型 |
 | `/vessels` | 渔船检索：按作业类型、主机功率区间、总吨位与船籍港组合查询 | FishingVessel |
 | `/vessels/:id` | 渔船档案详情：主尺度、主机功率、作业类型、证书有效期与进出港时间线 | FishingVessel、PortCall |
-| `/calls` | 进出港登记：选择渔船与类型，填写泊位号、加冰量、加油量、卸货量并同步泊位状态 | PortCall、Berth、FishingVessel |
+| `/calls` | 进出港登记：选渔船与类型、渔港与预计离港时间，进港抢占泊位 / 容量满排队、旧版本提示刷新，出港关闭租约并自动补位 | PortCall、BerthLease、Berth、FishingVessel |
 | `/map` | 渔港与在港渔船分布：高德 JS API 标记，未配置 key 时为 SVG 网格视图，点选弹出泊位占用摘要 | FishingPort、Berth |
 
 ## 数据存储说明
@@ -70,6 +71,20 @@ sologsb-1128/
   - `v1`：建 `ports`、`vessels` 表
   - `v2`：新增 `calls` 表与 `vesselId` 索引
   - `v3`：新增 `berths` 表，并按每个渔港登记的泊位数生成初始泊位记录
+  - `v4`：新增 `leases` **占用账本**（带租约与版本号）。泊位占用不再挂在 `berths` 上，
+    而是由生效租约统一派生；v3 的历史占用会自动转写为生效租约
+- **占用账本（租约）规则**：
+  - 进港在 Dexie 事务内按**最新账本状态**抢占：指定泊位则抢指定泊位（自动选第一个空闲泊位），
+    不选泊位则自动分配；泊位容量满时进入**排队**（FIFO），排队船舶无泊位号、不占容量、不计在港船数，
+    一旦有泊位释放（出港 / 租约失效 / 新增泊位 / 维修恢复）自动补位
+  - 每条租约带 `version` 乐观锁版本号与打开表单时的占用者快照；旧版本保存抛冲突错误，
+    页面提示「刷新占用状态」而**不会覆盖**
+  - 租约带预计离港时间与值班窗口心跳（15s）；**超过预计离港时间**或**窗口失联**（心跳超时 60s）
+    自动失效、释放泊位、补写出港流水并重算在港船数（应用每 15s 巡检一次，也可手动「租约巡检」）
+  - 同一渔船存在未结束航次（生效 / 排队租约）时**拒绝重复靠泊**
+  - 一个浏览器标签页 = 一个值班窗口（`sessionStorage` 分配 windowId）；跨标签页通过 storage 事件同步账本
+- **同一份生效占用**：港口详情、地图、流水、渔船档案全部读取「物理泊位 × 生效租约」的派生视图；
+  旧流水没有泊位号时按**未分配**处理，不挤占容量
 - **表单草稿走 localStorage**（键前缀 `gbfishport:draft:`），例如进出港登记草稿 `gbfishport:draft:call-board`，提交成功后自动清空。
 - 首次打开会自动写入一组演示数据（4 座渔港、6 艘渔船、8 条进出港流水与对应泊位），便于直接查看各页面效果。
 - 容器无状态：不使用数据库服务、不挂载命名卷，清空浏览器站点数据即可重置。

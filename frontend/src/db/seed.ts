@@ -1,12 +1,17 @@
 import type { FishingPort } from '../types/port';
 import type { FishingVessel } from '../types/vessel';
 import type { PortCall } from '../types/call';
+import type { BerthLease } from '../types/lease';
 import { toPlain } from '../utils/format';
 import { db } from './index';
-import { buildBerthRecords } from './berth';
+import { buildBerthRecords, buildSeedLeases } from './berth';
 
 function hoursAgo(hours: number): string {
   return new Date(Date.now() - hours * 3600 * 1000).toISOString();
+}
+
+function hoursFromNow(hours: number): string {
+  return new Date(Date.now() + hours * 3600 * 1000).toISOString();
 }
 
 function daysAgo(days: number): string {
@@ -176,6 +181,9 @@ export const SEED_CALLS: PortCall[] = [
     type: '进港',
     time: hoursAgo(5),
     berthNo: 'B01',
+    portId: 'p-1001',
+    leaseId: 'l-p-1001-B01',
+    expectedLeaveAt: hoursFromNow(19),
     iceKg: 1200,
     fuelL: 800,
     unloadKg: 8600,
@@ -189,6 +197,9 @@ export const SEED_CALLS: PortCall[] = [
     type: '进港',
     time: hoursAgo(3),
     berthNo: 'B02',
+    portId: 'p-1001',
+    leaseId: 'l-p-1001-B02',
+    expectedLeaveAt: hoursFromNow(21),
     iceKg: 900,
     fuelL: 1200,
     unloadKg: 12400,
@@ -202,6 +213,9 @@ export const SEED_CALLS: PortCall[] = [
     type: '进港',
     time: hoursAgo(2),
     berthNo: 'B01',
+    portId: 'p-1002',
+    leaseId: 'l-p-1002-B01',
+    expectedLeaveAt: hoursFromNow(22),
     iceKg: 600,
     fuelL: 0,
     unloadKg: 5200,
@@ -215,6 +229,9 @@ export const SEED_CALLS: PortCall[] = [
     type: '进港',
     time: hoursAgo(1),
     berthNo: 'B01',
+    portId: 'p-1003',
+    leaseId: 'l-p-1003-B01',
+    expectedLeaveAt: hoursFromNow(23),
     iceKg: 300,
     fuelL: 260,
     unloadKg: 2100,
@@ -228,6 +245,7 @@ export const SEED_CALLS: PortCall[] = [
     type: '出港',
     time: daysAgo(1),
     berthNo: 'B02',
+    portId: 'p-1004',
     iceKg: 0,
     fuelL: 420,
     unloadKg: 0,
@@ -241,6 +259,9 @@ export const SEED_CALLS: PortCall[] = [
     type: '进港',
     time: daysAgo(1),
     berthNo: 'B02',
+    portId: 'p-1002',
+    leaseId: 'l-p-1002-B02',
+    expectedLeaveAt: hoursFromNow(20),
     iceKg: 480,
     fuelL: 300,
     unloadKg: 3600,
@@ -254,6 +275,7 @@ export const SEED_CALLS: PortCall[] = [
     type: '出港',
     time: daysAgo(2),
     berthNo: 'B01',
+    portId: 'p-1001',
     iceKg: 0,
     fuelL: 950,
     unloadKg: 0,
@@ -267,16 +289,32 @@ export const SEED_CALLS: PortCall[] = [
     type: '出港',
     time: daysAgo(4),
     berthNo: 'B03',
+    portId: 'p-1002',
     iceKg: 200,
     fuelL: 540,
     unloadKg: 0,
     visaStatus: '待签证',
     createdAt: daysAgo(4),
   },
+  {
+    // 旧航次：没有泊位号（未分配），按未分配处理，不挤占任何容量
+    id: 'c-3009',
+    vesselId: 'v-2004',
+    vesselName: '浙岭渔09342',
+    type: '进港',
+    time: daysAgo(6),
+    berthNo: '',
+    portId: 'p-1004',
+    iceKg: 200,
+    fuelL: 120,
+    unloadKg: 900,
+    visaStatus: '待签证',
+    createdAt: daysAgo(6),
+  },
 ];
 
 /**
- * 首次进入时写入演示数据，并为缺少泊位记录的渔港补齐泊位。
+ * 首次进入时写入演示数据，并为缺少泊位记录的渔港补齐物理泊位与租约账本。
  * 写库前统一 toPlain 脱代理，避免 DataCloneError。
  */
 export async function ensureSeedData(): Promise<void> {
@@ -291,6 +329,12 @@ export async function ensureSeedData(): Promise<void> {
     const existing = await db.berths.where('portId').equals(port.id).count();
     if (existing === 0) {
       await db.berths.bulkPut(toPlain(buildBerthRecords(port)));
+    }
+    // 新库：按演示占用写生效租约；已结束 / 未分配航次不建租约
+    const leaseCount = await db.leases.where('portId').equals(port.id).count();
+    if (leaseCount === 0) {
+      const seedLeases: BerthLease[] = buildSeedLeases(port);
+      if (seedLeases.length) await db.leases.bulkPut(toPlain(seedLeases));
     }
   }
 }

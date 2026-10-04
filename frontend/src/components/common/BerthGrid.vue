@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { Berth, BerthStatus } from '../../types/berth';
+import type { LiveBerth, BerthStatus } from '../../types/berth';
 import { formatNumber } from '../../utils/format';
 
 const props = withDefaults(
   defineProps<{
-    berths: Berth[];
+    berths: LiveBerth[];
     perRow?: number;
     selectable?: boolean;
     highlightBerthNo?: string;
@@ -13,7 +13,7 @@ const props = withDefaults(
   { perRow: 4, selectable: true, highlightBerthNo: '' },
 );
 
-const emit = defineEmits<{ (e: 'select', berth: Berth): void }>();
+const emit = defineEmits<{ (e: 'select', berth: LiveBerth): void }>();
 
 const CELL_W = 120;
 const CELL_H = 78;
@@ -50,7 +50,7 @@ function cellAt(index: number): { x: number; y: number } {
   return { x: PAD + col * (CELL_W + GAP), y: PAD + row * (CELL_H + GAP) };
 }
 
-function onSelect(berth: Berth): void {
+function onSelect(berth: LiveBerth): void {
   if (props.selectable) emit('select', berth);
 }
 </script>

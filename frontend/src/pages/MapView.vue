@@ -7,7 +7,7 @@ import { useAmapLoader } from '../hooks/useAmapLoader';
 import { useBerthStatus } from '../hooks/useBerthStatus';
 import MapPanel from '../components/common/MapPanel.vue';
 import EmptyState from '../components/common/EmptyState.vue';
-import type { Berth } from '../types/berth';
+import type { LiveBerth } from '../types/berth';
 import { formatDateTime, percentText } from '../utils/format';
 import { haversineKm } from '../utils/geo';
 
@@ -17,14 +17,15 @@ const uiStore = useUiStore();
 
 const loader = useAmapLoader();
 const berthsRef = computed(() => portStore.berths);
-const { summaryOf } = useBerthStatus(berthsRef);
+const leasesRef = computed(() => portStore.leases);
+const { summaryOf } = useBerthStatus({ berths: berthsRef, leases: leasesRef });
 
 const dialogVisible = ref(false);
 const activePortId = ref('');
 
 const activePort = computed(() => portStore.ports.find((p) => p.id === activePortId.value));
 const activeSummary = computed(() => (activePortId.value ? summaryOf(activePortId.value) : null));
-const activeBerths = computed<Berth[]>(() => (activePortId.value ? portStore.berthsOf(activePortId.value) : []));
+const activeBerths = computed<LiveBerth[]>(() => (activePortId.value ? portStore.berthsOf(activePortId.value) : []));
 
 const portRows = computed(() =>
   portStore.ports
@@ -97,6 +98,7 @@ function openPortDetail(): void {
           <MapPanel
             :ports="portStore.ports"
             :berths="portStore.berths"
+            :leases="portStore.leases"
             :focused-port-id="uiStore.selectedPortId"
             :height="460"
             @select-port="onSelectPort"
@@ -125,7 +127,8 @@ function openPortDetail(): void {
                 :show-text="false"
               />
               <span class="rank-item__meta">
-                在港 {{ row.summary.inPortCount }} 艘 · 空闲 {{ row.summary.free }} 个泊位 · {{ row.port.level }}
+                在港 {{ row.summary.inPortCount }} 艘 · 空闲 {{ row.summary.free }} 个泊位 ·
+                排队 {{ row.summary.waitingCount }} 艘 · {{ row.port.level }}
               </span>
             </div>
           </div>
@@ -145,6 +148,9 @@ function openPortDetail(): void {
             {{ activeSummary.occupied }} / {{ activeSummary.free }}
           </el-descriptions-item>
           <el-descriptions-item label="维修泊位">{{ activeSummary.maintenance }}</el-descriptions-item>
+          <el-descriptions-item label="可用容量 / 排队">
+            {{ activeSummary.capacity }} / {{ activeSummary.waitingCount }} 艘
+          </el-descriptions-item>
         </el-descriptions>
 
         <p class="dialog-sub">在港船舶</p>
@@ -153,6 +159,17 @@ function openPortDetail(): void {
           <el-table-column prop="vesselName" label="船名" min-width="130" />
           <el-table-column label="靠泊时间" min-width="160">
             <template #default="scope">{{ formatDateTime(scope.row.berthAt) }}</template>
+          </el-table-column>
+          <el-table-column label="预计离港" min-width="160">
+            <template #default="scope">{{ formatDateTime(scope.row.expectedLeaveAt) }}</template>
+          </el-table-column>
+        </el-table>
+
+        <p class="dialog-sub">排队等泊（{{ activeSummary.waitingLeases.length }} 艘，不占容量）</p>
+        <el-table :data="activeSummary.waitingLeases" size="small" border empty-text="当前无排队船舶" data-testid="summary-waiting-table">
+          <el-table-column prop="vesselName" label="船名" min-width="130" />
+          <el-table-column label="入队时间" min-width="160">
+            <template #default="scope">{{ formatDateTime(scope.row.queuedAt ?? scope.row.createdAt) }}</template>
           </el-table-column>
         </el-table>
 

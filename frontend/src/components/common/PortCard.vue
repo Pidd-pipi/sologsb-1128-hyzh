@@ -76,6 +76,7 @@ function onClick(): void {
     <div class="port-card__stats">
       <span>在港船数 <b>{{ summary.inPortCount }}</b></span>
       <span>空闲泊位 <b>{{ summary.free }}</b></span>
+      <span>排队 <b>{{ summary.waitingCount }}</b></span>
       <span>维修泊位 <b>{{ summary.maintenance }}</b></span>
     </div>
 

@@ -1,12 +1,25 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { Location, MapLocation, Tickets, Van } from '@element-plus/icons-vue';
 import { useUiStore } from './stores/uiStore';
+import { usePortStore } from './stores/portStore';
 
 const route = useRoute();
 const uiStore = useUiStore();
+const portStore = usePortStore();
+
+let stopLedger: (() => void) | null = null;
+
+onMounted(() => {
+  // 启动占用账本值守：心跳续租 + 超时 / 失联租约巡检 + 队列补位
+  stopLedger = portStore.startLedger();
+});
+
+onBeforeUnmount(() => {
+  stopLedger?.();
+});
 
 const activePath = computed(() => {
   const path = route.path;

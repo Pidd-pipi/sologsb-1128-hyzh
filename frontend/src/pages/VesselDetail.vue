@@ -21,14 +21,29 @@ const loaded = ref(false);
 const calls = computed<PortCall[]>(() => (vessel.value ? portStore.callsOfVessel(vessel.value.id) : []));
 
 const occupancy = computed(() => {
-  if (!vessel.value) return [] as Array<{ portName: string; berthNo: string; berthAt: string | null }>;
-  return portStore.berths
+  if (!vessel.value) return [] as Array<{ portName: string; berthNo: string; berthAt: string | null; expectedLeaveAt: string | null; queued: boolean }>;
+  // 生效租约（已分配泊位，占容量）
+  const active = portStore.berths
     .filter((b) => b.vesselId === vessel.value!.id && b.status === '占用')
     .map((b) => ({
       portName: portStore.portById(b.portId)?.name ?? b.portId,
       berthNo: b.berthNo,
       berthAt: b.berthAt,
+      expectedLeaveAt: b.expectedLeaveAt,
+      queued: false,
     }));
+  // 未结束的排队航次（未分配泊位，不占容量）
+  const openLease = portStore.openLeaseOfVessel(vessel.value!.id);
+  if (openLease?.status === '排队') {
+    active.push({
+      portName: portStore.portById(openLease.portId)?.name ?? openLease.portId,
+      berthNo: '排队中',
+      berthAt: null,
+      expectedLeaveAt: openLease.expectedLeaveAt,
+      queued: true,
+    });
+  }
+  return active;
 });
 
 const expiryDays = computed(() => (vessel.value ? daysUntilExpiry(vessel.value.certificateExpiry) : Number.NaN));
@@ -110,12 +125,20 @@ watch(vesselId, bootstrap);
           </el-card>
 
           <el-card shadow="never" class="detail-card">
-            <template #header><span class="card-title">当前泊位</span></template>
+            <template #header><span class="card-title">当前航次</span></template>
             <el-table :data="occupancy" size="small" border empty-text="该船当前不在港">
-              <el-table-column prop="portName" label="渔港" min-width="130" />
-              <el-table-column prop="berthNo" label="泊位号" width="90" />
-              <el-table-column label="靠泊时间" min-width="150">
+              <el-table-column prop="portName" label="渔港" min-width="120" />
+              <el-table-column label="泊位号" width="90">
+                <template #default="scope">
+                  <el-tag v-if="scope.row.queued" size="small" type="warning" effect="plain">排队中</el-tag>
+                  <span v-else>{{ scope.row.berthNo }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="靠泊时间" min-width="145">
                 <template #default="scope">{{ formatDateTime(scope.row.berthAt) }}</template>
+              </el-table-column>
+              <el-table-column label="预计离港" min-width="145">
+                <template #default="scope">{{ formatDateTime(scope.row.expectedLeaveAt) }}</template>
               </el-table-column>
             </el-table>
           </el-card>
@@ -134,7 +157,8 @@ watch(vesselId, bootstrap);
           >
             <div class="timeline-row">
               <el-tag size="small" :type="call.type === '进港' ? 'primary' : 'success'">{{ call.type }}</el-tag>
-              <span>泊位 {{ call.berthNo }}</span>
+              <span>泊位 {{ call.berthNo || '未分配' }}</span>
+              <span v-if="call.expectedLeaveAt">预计离港 {{ formatDateTime(call.expectedLeaveAt) }}</span>
               <span>加冰 {{ formatNumber(call.iceKg, 0) }} kg</span>
               <span>加油 {{ formatNumber(call.fuelL, 0) }} L</span>
               <span>卸货 {{ formatNumber(call.unloadKg, 0) }} kg</span>

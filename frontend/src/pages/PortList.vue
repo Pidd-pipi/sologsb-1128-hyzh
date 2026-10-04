@@ -14,7 +14,8 @@ const router = useRouter();
 const portStore = usePortStore();
 const uiStore = useUiStore();
 const berthsRef = computed(() => portStore.berths);
-const { summaryOf } = useBerthStatus(berthsRef);
+const leasesRef = computed(() => portStore.leases);
+const { summaryOf } = useBerthStatus({ berths: berthsRef, leases: leasesRef });
 
 const shelterOptions = [
   { label: '不限', value: null },
@@ -53,12 +54,13 @@ const rules: FormRules = {
 const overall = computed(() => {
   const list = portStore.ports;
   const berthTotal = list.reduce((sum, p) => sum + summaryOf(p.id).total, 0);
-  const occupied = list.reduce((sum, p) => sum + summaryOf(p.id).occupied, 0);
+  const occupied = list.reduce((sum, p) => sum + summaryOf(p.id).inPortCount, 0);
+  const capacity = list.reduce((sum, p) => sum + summaryOf(p.id).capacity, 0);
   return {
     portCount: list.length,
     berthTotal,
     occupied,
-    rate: berthTotal === 0 ? 0 : occupied / berthTotal,
+    rate: capacity === 0 ? 0 : occupied / capacity,
   };
 });
 
