@@ -1,5 +1,6 @@
 node_modules/
 dist/
+scripts/.smoke/
 .env
 .DS_Store
 *.log

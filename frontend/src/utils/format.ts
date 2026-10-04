@@ -57,6 +57,13 @@ export function nowLocalInputValue(): string {
   return toLocalInputValue(new Date());
 }
 
+/** 给定 datetime-local 值（或当前时间）加 hours 小时后的输入值 */
+export function plusHoursLocalInput(hours: number, base?: string): string {
+  const baseDate = base ? new Date(base) : new Date();
+  const d = Number.isNaN(baseDate.getTime()) ? new Date() : baseDate;
+  return toLocalInputValue(new Date(d.getTime() + hours * 3600 * 1000));
+}
+
 /** 判断 ISO 时间是否落在今天 */
 export function isToday(iso: string): boolean {
   const d = new Date(iso);

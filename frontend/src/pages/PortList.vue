@@ -13,8 +13,9 @@ import { percentText } from '../utils/format';
 const router = useRouter();
 const portStore = usePortStore();
 const uiStore = useUiStore();
-const berthsRef = computed(() => portStore.berths);
-const { summaryOf } = useBerthStatus(berthsRef);
+const berthsRef = computed(() => portStore.effectiveBerths);
+const leasesRef = computed(() => portStore.leases);
+const { summaryOf } = useBerthStatus(berthsRef, leasesRef);
 
 const shelterOptions = [
   { label: '不限', value: null },
@@ -54,10 +55,12 @@ const overall = computed(() => {
   const list = portStore.ports;
   const berthTotal = list.reduce((sum, p) => sum + summaryOf(p.id).total, 0);
   const occupied = list.reduce((sum, p) => sum + summaryOf(p.id).occupied, 0);
+  const waiting = portStore.leases.filter((l) => l.state === '排队').length;
   return {
     portCount: list.length,
     berthTotal,
     occupied,
+    waiting,
     rate: berthTotal === 0 ? 0 : occupied / berthTotal,
   };
 });
@@ -99,7 +102,7 @@ function openPort(portId: string): void {
     <header class="page__head">
       <div>
         <h1>渔港一览</h1>
-        <p class="page__sub">共 {{ overall.portCount }} 座渔港 · {{ overall.berthTotal }} 个泊位 · 在港船舶 {{ overall.occupied }} 艘 · 平均占用率 {{ percentText(overall.rate) }}</p>
+        <p class="page__sub">共 {{ overall.portCount }} 座渔港 · {{ overall.berthTotal }} 个泊位 · 在港船舶 {{ overall.occupied }} 艘 · 排队等泊 {{ overall.waiting }} 艘 · 平均占用率 {{ percentText(overall.rate) }}</p>
       </div>
       <el-button type="primary" data-testid="open-port-dialog" @click="openDialog">登记渔港</el-button>
     </header>

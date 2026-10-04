@@ -4,9 +4,13 @@ import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { Location, MapLocation, Tickets, Van } from '@element-plus/icons-vue';
 import { useUiStore } from './stores/uiStore';
+import { usePortStore } from './stores/portStore';
+import { useLedgerAgent } from './hooks/useLedgerAgent';
+import type { ClosedLease } from './types/lease';
 
 const route = useRoute();
 const uiStore = useUiStore();
+const portStore = usePortStore();
 
 const activePath = computed(() => {
   const path = route.path;
@@ -15,6 +19,24 @@ const activePath = computed(() => {
   if (path.startsWith('/calls')) return '/calls';
   if (path.startsWith('/map')) return '/map';
   return path;
+});
+
+// 值班窗口：心跳探活 + 租约失效扫描 + 跨窗口账本刷新
+useLedgerAgent({
+  reload: async () => {
+    if (portStore.ports.length) await portStore.reloadLedger();
+  },
+  onClosed: (closed: ClosedLease[]) => {
+    for (const item of closed) {
+      const portName = portStore.portById(item.lease.portId)?.name ?? '';
+      const reasonText = item.reason === '窗口失联' ? '窗口失联' : '超过预计离港时间';
+      ElMessage.warning({
+        message: `${item.lease.vesselName} 在 ${portName}${item.lease.berthNo ? `泊位 ${item.lease.berthNo}` : ''} 的租约因${reasonText}失效，占用已释放` +
+          (item.promoted ? '，排队船舶已自动靠泊' : ''),
+        duration: 5000,
+      });
+    }
+  },
 });
 
 watch(

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, toRef, watch } from 'vue';
 import type { FishingPort } from '../../types/port';
-import type { Berth } from '../../types/berth';
+import type { EffectiveBerth } from '../../types/berth';
+import type { BerthLease } from '../../types/lease';
 import { useAmapLoader } from '../../hooks/useAmapLoader';
 import { useBerthStatus } from '../../hooks/useBerthStatus';
 import { boundsOf, gridLines, projectToGrid } from '../../utils/geo';
@@ -10,16 +11,18 @@ import { percentText } from '../../utils/format';
 const props = withDefaults(
   defineProps<{
     ports: FishingPort[];
-    berths: Berth[];
+    /** 生效占用泊位（物理泊位叠加生效租约） */
+    berths: EffectiveBerth[];
+    leases?: BerthLease[];
     height?: number;
     focusedPortId?: string;
   }>(),
-  { height: 380, focusedPortId: '' },
+  { height: 380, focusedPortId: '', leases: () => [] },
 );
 
 const emit = defineEmits<{
   (e: 'select-port', portId: string): void;
-  (e: 'select-berth', berth: Berth): void;
+  (e: 'select-berth', berth: EffectiveBerth): void;
 }>();
 
 const loader = useAmapLoader();
@@ -34,7 +37,8 @@ const WIDTH = 760;
 const HEIGHT = 360;
 
 const berthRef = toRef(props, 'berths');
-const { summaryOf } = useBerthStatus(berthRef);
+const leaseRef = toRef(props, 'leases');
+const { summaryOf } = useBerthStatus(berthRef, leaseRef);
 
 const bounds = computed(() => boundsOf(props.ports));
 const lines = computed(() => gridLines(bounds.value, 8, 5));

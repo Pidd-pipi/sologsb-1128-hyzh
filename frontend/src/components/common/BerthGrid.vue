@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { Berth, BerthStatus } from '../../types/berth';
-import { formatNumber } from '../../utils/format';
+import type { BerthStatus, EffectiveBerth } from '../../types/berth';
+import { formatDateTime, formatNumber } from '../../utils/format';
 
 const props = withDefaults(
   defineProps<{
-    berths: Berth[];
+    berths: EffectiveBerth[];
     perRow?: number;
     selectable?: boolean;
     highlightBerthNo?: string;
@@ -13,7 +13,7 @@ const props = withDefaults(
   { perRow: 4, selectable: true, highlightBerthNo: '' },
 );
 
-const emit = defineEmits<{ (e: 'select', berth: Berth): void }>();
+const emit = defineEmits<{ (e: 'select', berth: EffectiveBerth): void }>();
 
 const CELL_W = 120;
 const CELL_H = 78;
@@ -50,7 +50,7 @@ function cellAt(index: number): { x: number; y: number } {
   return { x: PAD + col * (CELL_W + GAP), y: PAD + row * (CELL_H + GAP) };
 }
 
-function onSelect(berth: Berth): void {
+function onSelect(berth: EffectiveBerth): void {
   if (props.selectable) emit('select', berth);
 }
 </script>
@@ -80,7 +80,9 @@ function onSelect(berth: Berth): void {
           :data-status="berth.status"
           @click="onSelect(berth)"
         >
-          <title>{{ `${berth.berthNo} · ${berth.status}${berth.vesselName ? ' · ' + berth.vesselName : ''}` }}</title>
+          <title>{{
+            `${berth.berthNo} · ${berth.status}${berth.vesselName ? ' · ' + berth.vesselName : ''}${berth.expectedLeaveAt ? ' · 预计离港 ' + formatDateTime(berth.expectedLeaveAt) : ''}`
+          }}</title>
         </rect>
         <text
           :x="cellAt(index).x + 12"

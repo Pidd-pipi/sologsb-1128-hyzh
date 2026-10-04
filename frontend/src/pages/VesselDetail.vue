@@ -20,15 +20,20 @@ const loaded = ref(false);
 
 const calls = computed<PortCall[]>(() => (vessel.value ? portStore.callsOfVessel(vessel.value.id) : []));
 
+/** 当前占用读同一份生效账本：同一渔船至多一条生效租约（靠泊 / 排队） */
 const occupancy = computed(() => {
-  if (!vessel.value) return [] as Array<{ portName: string; berthNo: string; berthAt: string | null }>;
-  return portStore.berths
-    .filter((b) => b.vesselId === vessel.value!.id && b.status === '占用')
-    .map((b) => ({
-      portName: portStore.portById(b.portId)?.name ?? b.portId,
-      berthNo: b.berthNo,
-      berthAt: b.berthAt,
-    }));
+  if (!vessel.value) return null;
+  const lease = portStore.activeLeaseOfVessel(vessel.value.id);
+  if (!lease) return null;
+  return {
+    lease,
+    portName: portStore.portById(lease.portId)?.name ?? lease.portId,
+    berthNo: lease.berthNo,
+    state: lease.state,
+    berthAt: lease.berthAt,
+    expectedLeaveAt: lease.expectedLeaveAt,
+    enqueuedAt: lease.enqueuedAt,
+  };
 });
 
 const expiryDays = computed(() => (vessel.value ? daysUntilExpiry(vessel.value.certificateExpiry) : Number.NaN));
@@ -110,14 +115,26 @@ watch(vesselId, bootstrap);
           </el-card>
 
           <el-card shadow="never" class="detail-card">
-            <template #header><span class="card-title">当前泊位</span></template>
-            <el-table :data="occupancy" size="small" border empty-text="该船当前不在港">
-              <el-table-column prop="portName" label="渔港" min-width="130" />
-              <el-table-column prop="berthNo" label="泊位号" width="90" />
-              <el-table-column label="靠泊时间" min-width="150">
-                <template #default="scope">{{ formatDateTime(scope.row.berthAt) }}</template>
-              </el-table-column>
-            </el-table>
+            <template #header><span class="card-title">当前航次</span></template>
+            <el-descriptions v-if="occupancy" :column="1" size="small" border data-testid="vessel-current-voyage">
+              <el-descriptions-item label="状态">
+                <el-tag :type="occupancy.state === '排队' ? 'warning' : 'primary'" size="small">
+                  {{ occupancy.state === '排队' ? '排队等泊中' : '在港靠泊' }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="渔港">{{ occupancy.portName }}</el-descriptions-item>
+              <el-descriptions-item label="泊位号">
+                <el-tag v-if="occupancy.berthNo" size="small">{{ occupancy.berthNo }}</el-tag>
+                <el-tag v-else size="small" type="info" effect="plain">未分配（排队中，不挤占容量）</el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="靠泊/入队时间">
+                {{ formatDateTime(occupancy.state === '排队' ? occupancy.enqueuedAt : occupancy.berthAt) }}
+              </el-descriptions-item>
+              <el-descriptions-item label="预计离港">
+                {{ formatDateTime(occupancy.expectedLeaveAt) }}
+              </el-descriptions-item>
+            </el-descriptions>
+            <EmptyState v-else title="该船当前不在港" description="没有生效中的靠泊或排队租约。" />
           </el-card>
         </el-col>
       </el-row>
@@ -134,11 +151,13 @@ watch(vesselId, bootstrap);
           >
             <div class="timeline-row">
               <el-tag size="small" :type="call.type === '进港' ? 'primary' : 'success'">{{ call.type }}</el-tag>
-              <span>泊位 {{ call.berthNo }}</span>
+              <span>{{ portStore.portById(call.portId)?.name ?? '未记录渔港' }}</span>
+              <span>泊位 <el-tag v-if="call.berthNo" size="small">{{ call.berthNo }}</el-tag><el-tag v-else size="small" type="info" effect="plain">未分配</el-tag></span>
               <span>加冰 {{ formatNumber(call.iceKg, 0) }} kg</span>
               <span>加油 {{ formatNumber(call.fuelL, 0) }} L</span>
               <span>卸货 {{ formatNumber(call.unloadKg, 0) }} kg</span>
               <el-tag size="small" type="info" effect="plain">{{ call.visaStatus }}</el-tag>
+              <el-tag v-if="call.leaseExpired" size="small" type="danger">租约失效</el-tag>
             </div>
           </el-timeline-item>
         </el-timeline>
